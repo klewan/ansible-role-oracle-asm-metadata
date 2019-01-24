@@ -1,0 +1,14 @@
+---
+
+# ASM metadata backup dir
+oracle_asm_metadata_backup_dir: '{{ oracle_default_backup_dir|default( "/u01/app/psu/backup", true ) }}'
+
+# ASM metadata log dir
+oracle_asm_metadata_log_dir: '{{ oracle_default_log_dir|default( "/u01/app/psu/log", true ) }}'
+
+# checks if DB is RAC or non-RAC 
+oracle_asm_metadata_local_config: "{% if oracle_gi_info.rac_nodes|length == 0 %}-local{% else %}{% endif %}"
+
+# print collected information about Grid Infrastructure
+oracle_asm_metadata_print_gi_info: false
+

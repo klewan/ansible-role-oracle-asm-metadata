@@ -1,0 +1,57 @@
+---
+
+- name: assert that GRID_HOME is not empty
+  assert:
+    that:
+      - "oracle_gi_info.oracle_home|default('', true)|length > 0"
+    fail_msg: "'oracle_gi_info.oracle_home' must not be empty"
+  tags:
+    - oracle_asm_metadata_precheck
+
+- name: print collected data
+  debug: var=oracle_gi_info
+  when: oracle_asm_metadata_print_gi_info
+  tags:
+    - oracle_asm_metadata_print_gi_info
+
+- name: create backup and log directory for OCR/OLR and ASM metadata
+  file:
+    dest: "{{ item.directory }}"
+    state: directory
+    owner: '{{ oracle_user }}'
+  with_items:
+    - { directory: "{{ oracle_asm_metadata_backup_dir }}", description: 'Here you can find ASM metadata backups' }
+    - { directory: "{{ oracle_asm_metadata_log_dir }}", description: 'Here you can find logs from ASM checks' }
+  loop_control:
+    label: "[directory: {{ item.directory }}; description: {{ item.description }}]"
+  when: oracle_gi_info.oracle_home|default('', true)|length > 0
+  tags:
+    - oracle_asm_metadata_directories
+
+- name: perform OCR/OLR ocrconfig manualbackup
+  shell: |
+    sudo {{ oracle_gi_info.oracle_home }}/bin/ocrconfig {{ oracle_asm_metadata_local_config }} -manualbackup
+  args:
+    warn: false
+  become: false
+  when: not ansible_check_mode and oracle_gi_info.oracle_home|default('', true)|length > 0
+  tags:
+    - oracle_asm_metadata_ocrconfig_manualbackup
+
+- name: export OCR/OLR contents and ASM metadata to a file
+  shell: |
+    export ORACLE_HOME={{ oracle_gi_info.oracle_home }}
+    export ORACLE_SID=$(ps -ef| awk '{print $NF}' | grep asm_pmon | grep -vw asm_pmon | cut -d_ -f3)
+    TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
+    {{ oracle_gi_info.oracle_home }}/bin/crsctl stat res -t > {{ oracle_asm_metadata_log_dir }}/crsctl_stat_res.${TIMESTAMP}.log 
+    ps -ef|grep pmon|grep -v grep > {{ oracle_asm_metadata_log_dir }}/processes.${TIMESTAMP}.log 
+    ps -ef|grep tns|grep -v grep >> {{ oracle_asm_metadata_log_dir }}/processes.${TIMESTAMP}.log 
+    ps -ef|grep dbconsole|grep -v grep >> {{ oracle_asm_metadata_log_dir }}/processes.${TIMESTAMP}.log 
+    {{ oracle_gi_info.oracle_home }}/bin/ocrcheck {{ oracle_asm_metadata_local_config }} > {{ oracle_asm_metadata_log_dir }}/OLR_check.${TIMESTAMP}.log 
+    {{ oracle_gi_info.oracle_home }}/bin/ocrconfig {{ oracle_asm_metadata_local_config }} -showbackup > {{ oracle_asm_metadata_log_dir }}/OLR_backups.${TIMESTAMP}.log 
+    {{ oracle_gi_info.oracle_home }}/bin/ocrconfig {{ oracle_asm_metadata_local_config }} -export {{ oracle_asm_metadata_backup_dir }}/OLR_export.${TIMESTAMP}.dmp 
+    {{ oracle_gi_info.oracle_home }}/bin/asmcmd md_backup {{ oracle_asm_metadata_backup_dir }}/asm_metadata.${TIMESTAMP}.dmp
+  when: not ansible_check_mode and oracle_gi_info.oracle_home|default('', true)|length > 0
+  tags:
+    - oracle_asm_metadata_backup_metadata
+
